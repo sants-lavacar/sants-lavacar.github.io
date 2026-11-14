@@ -16,7 +16,7 @@ function addVomitGalleryGroup() {
   group.dataset.galleryExtra = 'vomito';
 
   const title = document.createElement('h2');
-  title.textContent = 'Higienização após vômito';
+  title.textContent = 'Descontaminação interna da porta com remoção do forro';
   group.append(title);
 
   const photos = document.createElement('div');
