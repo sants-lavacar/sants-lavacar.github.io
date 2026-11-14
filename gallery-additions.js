@@ -3,13 +3,37 @@ const EXTRA_GROUP = [
   { title: 'Porta inteira', before: 'vomito-porta-antes.jpg', after: 'vomito-porta-depois.jpg' },
   { title: 'Forro da porta', before: 'vomito-forro-antes.jpg', after: 'vomito-forro-depois.jpg' },
 ];
+const BANK_IMAGE_ORDER = ['bancos-3.jpg', 'bancos-2.jpg', 'bancos-1.jpg'];
+
+function reorderBankGalleryImages(gallery) {
+  const children = [...gallery.children];
+  const bankFigures = children.filter((figure) => {
+    const image = figure.matches('.gi') ? figure.querySelector('img') : null;
+    return image && BANK_IMAGE_ORDER.some((filename) => image.src.endsWith(`/img/${filename}`));
+  });
+  if (bankFigures.length !== BANK_IMAGE_ORDER.length) return;
+
+  const bankByFilename = new Map(bankFigures.map((figure) => {
+    const image = figure.querySelector('img');
+    const filename = BANK_IMAGE_ORDER.find((item) => image.src.endsWith(`/img/${item}`));
+    return [filename, figure];
+  }));
+  let nextBank = 0;
+  const reordered = children.map((child) => child.matches('.gi') && bankFigures.includes(child)
+    ? bankByFilename.get(BANK_IMAGE_ORDER[nextBank++])
+    : child);
+  gallery.append(...reordered);
+}
 
 function addVomitGalleryGroup() {
   const app = document.getElementById('app');
   if (!app) return;
   const heading = [...app.querySelectorAll('h1')].find((item) => item.textContent.trim() === 'Antes e depois');
   const gallery = app.querySelector('.gal');
-  if (!heading || !gallery || gallery.querySelector('[data-gallery-extra="vomito"]')) return;
+  if (!heading || !gallery) return;
+
+  reorderBankGalleryImages(gallery);
+  if (gallery.querySelector('[data-gallery-extra="vomito"]')) return;
 
   const group = document.createElement('section');
   group.className = 'gal-extra';
