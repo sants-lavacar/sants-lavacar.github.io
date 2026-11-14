@@ -13,8 +13,8 @@ const INITIAL_PACKAGES = [
     price: 30,
   },
   {
-    id: 'moto-lavagem-tecnica-enceramento-completa',
-    name: 'Lavagem Técnica com Enceramento Completo',
+    id: 'moto-lavagem-tecnica-detalhada-enceramento',
+    name: 'Lavagem Técnica Detalhada com Enceramento',
     items: [
       'Lavagem técnica detalhada completa',
       'Limpeza das rodas e do motor',
@@ -175,9 +175,12 @@ const observer = new MutationObserver(() => {
 observer.observe(app || document.body, { childList: true, subtree: true });
 
 onSnapshot(catalogRef, (snapshot) => {
-  // Preserve the provided defaults if no catalog has been saved yet. The first
-  // package save writes all three defaults to Firestore.
-  if (snapshot.exists() && Array.isArray(snapshot.data().packages)) packages = snapshot.data().packages;
+  // Preserve provided defaults when the catalog has not been saved yet.
+  if (snapshot.exists() && Array.isArray(snapshot.data().packages)) {
+    packages = snapshot.data().packages.map((item) => item.id === 'moto-lavagem-tecnica-enceramento-completa'
+      ? { ...item, name: 'Lavagem Técnica Detalhada com Enceramento' }
+      : item);
+  }
   ready = true;
   const panel = document.querySelector('.moto-services-panel');
   if (panel && activeView === 'motos' && !panel.querySelector('input:focus, textarea:focus')) renderPanel(panel);
