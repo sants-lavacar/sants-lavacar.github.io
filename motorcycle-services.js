@@ -1,43 +1,31 @@
-// Motorcycle-only package editor on the master Services screen.
+// Motorcycle-only package catalog for the master Services screen.
 import {getApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import {doc,getFirestore,onSnapshot,setDoc} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 
 const db = getFirestore(getApp());
-// Separate document prevents normal app config saves from overwriting this catalog.
+// Kept separate from config/app to prevent general settings saves overwriting it.
 const catalogRef = doc(db, 'config', 'motorcycle-services');
-const INITIAL_PACKAGES = [
-  {
-    id: 'moto-lavagem-essencial',
-    name: 'Lavagem Essencial',
-    items: ['Lavagem', 'Secagem'],
-    price: 30,
-  },
+const legacyConfigRef = doc(db, 'config', 'app');
+const DEFAULT_PACKAGES = [
+  { id: 'moto-lavagem-essencial', name: 'Lavagem Essencial', items: ['Lavagem', 'Secagem'], price: 30 },
   {
     id: 'moto-lavagem-tecnica-detalhada-enceramento',
     name: 'Lavagem Técnica Detalhada com Enceramento',
-    items: [
-      'Lavagem técnica detalhada completa',
-      'Limpeza das rodas e do motor',
-      'Enceramento do tanque',
-      'Restauração dos plásticos e das borrachas',
-    ],
+    items: ['Lavagem técnica detalhada completa', 'Limpeza das rodas e do motor', 'Enceramento do tanque', 'Restauração dos plásticos e das borrachas'],
     price: 250,
   },
   {
     id: 'moto-lavagem-tecnica-enceramento',
     name: 'Lavagem Técnica com Enceramento',
-    items: [
-      'Lavagem',
-      'Limpeza das rodas e do motor',
-      'Enceramento do tanque',
-    ],
+    items: ['Lavagem', 'Limpeza das rodas e do motor', 'Enceramento do tanque'],
     price: 50,
   },
 ];
-let packages = INITIAL_PACKAGES.map((item) => ({ ...item, items: [...item.items] }));
+let packages = DEFAULT_PACKAGES.map((item) => ({ ...item, items: [...item.items] }));
 let activeView = 'cars';
 let ready = false;
 let renderQueued = false;
+let writing = false;
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -77,8 +65,8 @@ function setView(page, tabs, panel, view) {
   });
   panel.hidden = !motorcycles;
   page.querySelectorAll(':scope > section:not(.moto-services-panel)').forEach((section) => { section.hidden = motorcycles; });
-  const newServiceButton = page.querySelector('.head .btn');
-  if (newServiceButton) newServiceButton.hidden = motorcycles;
+  const addButton = page.querySelector('.head .btn');
+  if (addButton) addButton.hidden = motorcycles;
   if (motorcycles) renderPanel(panel);
 }
 
@@ -87,7 +75,6 @@ function mount() {
   const page = app?.querySelector('main.page');
   const header = page?.querySelector(':scope > .head');
   if (!page || !header || header.querySelector('h1')?.textContent.trim() !== 'Serviços') return;
-
   let tabs = page.querySelector('.moto-services-tabs');
   let panel = page.querySelector('.moto-services-panel');
   if (!tabs || !panel) {
@@ -123,6 +110,26 @@ function showError(panel, message) {
   if (error) { error.textContent = message; error.hidden = false; }
 }
 
+async function saveCatalog(panel, nextPackages, button) {
+  const previous = packages;
+  packages = nextPackages;
+  writing = true;
+  if (button) button.disabled = true;
+  try {
+    await persist();
+    renderPanel(panel);
+  } catch (error) {
+    packages = previous;
+    if (button) button.disabled = false;
+    showError(panel, error?.code === 'permission-denied'
+      ? 'Sem permissão para salvar. Confirme que entrou com o e-mail de empresa autorizado e que as regras do Firestore foram publicadas.'
+      : 'Não foi possível salvar. Verifique a conexão e tente novamente.');
+    console.error('Falha ao salvar o catálogo de motos:', error);
+  } finally {
+    writing = false;
+  }
+}
+
 document.addEventListener('click', async (event) => {
   const viewButton = event.target.closest('[data-moto-view]');
   if (viewButton) {
@@ -130,39 +137,28 @@ document.addEventListener('click', async (event) => {
     setView(page, page.querySelector('.moto-services-tabs'), page.querySelector('.moto-services-panel'), viewButton.dataset.motoView);
     return;
   }
-
   const button = event.target.closest('[data-moto-action]');
   if (!button) return;
   const panel = button.closest('.moto-services-panel');
-  if (button.dataset.motoAction === 'add') {
+  const action = button.dataset.motoAction;
+
+  if (action === 'add') {
     packages.push({ id: `moto-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: '', items: [], price: null });
     renderPanel(panel);
     panel.querySelector(`[data-moto-package="${CSS.escape(packages.at(-1).id)}"] [data-moto-field="name"]`)?.focus();
     return;
   }
-
-  if (button.dataset.motoAction === 'remove') {
-    const id = button.dataset.motoId;
+  if (action === 'remove') {
     if (!window.confirm('Remover este pacote para motos?')) return;
-    const previous = packages;
-    packages = packages.filter((item) => item.id !== id);
-    button.disabled = true;
-    try { await persist(); renderPanel(panel); }
-    catch (error) { packages = previous; button.disabled = false; showError(panel, 'Não foi possível remover o pacote. Confira a conexão e tente novamente.'); console.error(error); }
+    await saveCatalog(panel, packages.filter((item) => item.id !== button.dataset.motoId), button);
     return;
   }
-
-  if (button.dataset.motoAction === 'save') {
+  if (action === 'save') {
     const updated = readPackage(button);
     if (!updated?.name) { showError(panel, 'Informe o nome do pacote.'); return; }
-    const previous = packages;
-    packages = packages.map((item) => item.id === updated.id ? updated : item);
-    button.disabled = true;
-    try {
-      await persist();
-      button.textContent = 'Pacote salvo';
-      setTimeout(() => { if (button.isConnected) { button.textContent = 'Salvar pacote'; button.disabled = false; } }, 1400);
-    } catch (error) { packages = previous; button.disabled = false; showError(panel, 'Não foi possível salvar. Confira a conexão e tente novamente.'); console.error(error); }
+    if (updated.price != null && (!Number.isFinite(updated.price) || updated.price < 0)) { showError(panel, 'Informe um valor válido, igual ou maior que zero.'); return; }
+    const next = packages.map((item) => item.id === updated.id ? updated : item);
+    await saveCatalog(panel, next, button);
   }
 });
 
@@ -175,11 +171,22 @@ const observer = new MutationObserver(() => {
 observer.observe(app || document.body, { childList: true, subtree: true });
 
 onSnapshot(catalogRef, (snapshot) => {
-  // Preserve provided defaults when the catalog has not been saved yet.
+  if (writing) return;
   if (snapshot.exists() && Array.isArray(snapshot.data().packages)) {
     packages = snapshot.data().packages.map((item) => item.id === 'moto-lavagem-tecnica-enceramento-completa'
       ? { ...item, name: 'Lavagem Técnica Detalhada com Enceramento' }
       : item);
+  } else {
+    // Migrate packages saved by the earlier version in config/app.
+    onSnapshot(legacyConfigRef, (legacySnapshot) => {
+      if (writing || snapshot.exists()) return;
+      const legacy = legacySnapshot.data()?.motoCatalog;
+      if (Array.isArray(legacy) && legacy.length) packages = legacy;
+      ready = true;
+      const panel = document.querySelector('.moto-services-panel');
+      if (panel && activeView === 'motos' && !panel.querySelector('input:focus, textarea:focus')) renderPanel(panel);
+    }, (error) => console.error('Não foi possível migrar o catálogo anterior de motos:', error));
+    ready = true;
   }
   ready = true;
   const panel = document.querySelector('.moto-services-panel');

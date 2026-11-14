@@ -3,17 +3,25 @@ service cloud.firestore {
   match /databases/{database}/documents {
     function signed() { return request.auth != null; }
     function admin() {
-      return signed() && request.auth.token.email_verified == true
-        && request.auth.token.email in ['gstsoares27@gmail.com', 'geovanesantosx1999@gmail.com'];
+      return signed()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in [
+          'santslavacar@gmail.com',
+          'geovanesantosx1999@gmail.com',
+          'gstsoares27@gmail.com'
+        ];
     }
+
     match /config/{id} {
       allow read: if true;
       allow write: if admin();
     }
+
     match /users/{uid} {
       allow read, write: if signed() && request.auth.uid == uid;
       allow read: if admin();
     }
+
     match /bookings/{id} {
       allow read: if admin() || (signed() && resource.data.clientId == request.auth.uid);
       allow create: if signed() && request.resource.data.clientId == request.auth.uid
@@ -23,16 +31,18 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']));
       allow delete: if admin();
     }
-    // Ocupação por dia: só horários, sem dados do cliente.
+
+    // Occupancy records contain schedule data only.
     match /days/{date} {
       function onlyOwnItem() {
         let k = request.resource.data.lastKey;
         let n = request.resource.data.items;
         let o = resource.data.items;
-        let ch = n.diff(o).affectedKeys();
-        return ch.size() == 1 && ch.hasOnly([k]) && (
+        let changed = n.diff(o).affectedKeys();
+        return changed.size() == 1 && changed.hasOnly([k]) && (
           (k in n && !(k in o) && n[k].uid == request.auth.uid)
-          || (k in o && !(k in n) && o[k].uid == request.auth.uid));
+          || (k in o && !(k in n) && o[k].uid == request.auth.uid)
+        );
       }
       allow read: if signed();
       allow create: if admin() || (signed() && request.resource.data.items.size() == 1
@@ -40,6 +50,7 @@ service cloud.firestore {
       allow update: if admin() || (signed() && onlyOwnItem());
       allow delete: if admin();
     }
+
     match /vehicleRequests/{id} {
       allow create: if signed();
       allow read, delete: if admin();
