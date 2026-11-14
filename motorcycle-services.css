@@ -1,0 +1,7 @@
+/* Motorcycle service packages editor */
+.moto-services-tabs{width:100%;margin-top:-8px}
+.moto-services-panel{display:flex;flex-direction:column;gap:14px}
+.moto-package{display:flex;flex-direction:column;gap:12px}
+.moto-package textarea{resize:vertical;min-height:110px}
+.moto-package .link{align-self:center}
+.moto-services-panel>.muted{line-height:1.5}

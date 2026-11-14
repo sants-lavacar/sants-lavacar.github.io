@@ -1,76 +1,74 @@
-// Standalone motorcycle service catalog for the master Services screen.
+// Motorcycle-only package editor on the master Services screen.
 import {getApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import {doc,getFirestore,onSnapshot,setDoc} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 
 const db = getFirestore(getApp());
-const configRef = doc(db, 'config', 'app');
-let catalog = [];
+// Keep motorcycle packages in their own config document so ordinary app settings
+// saves cannot overwrite or delete this catalog.
+const catalogRef = doc(db, 'config', 'motorcycle-services');
+let packages = [];
 let activeView = 'cars';
-let configReady = false;
-let renderQueued = false;
+let ready = false;
+let rendering = false;
 
-const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
+const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 }[char]));
 
-function seedFromServices(services = []) {
-  return services.filter((service) => service.group === 'pacote').map((service) => ({
-    id: service.id,
-    name: service.name,
-    price: service.price?.moto ?? '',
-    items: Array.isArray(service.items) ? [...service.items] : [],
-  }));
-}
-
 function packageCard(item) {
-  const price = item.price === '' || item.price == null ? '' : escapeHtml(item.price);
-  return `<article class="card moto-package" data-moto-package="${escapeHtml(item.id)}">
-    <label class="f">Nome do pacote<input data-moto-field="name" value="${escapeHtml(item.name)}" placeholder="Ex.: Completa"></label>
-    <label class="f">Serviços incluídos<textarea data-moto-field="items" rows="4" placeholder="Informe um serviço por linha">${escapeHtml((item.items || []).join('\n'))}</textarea></label>
+  const price = item.price == null ? '' : esc(item.price);
+  return `<article class="card moto-package" data-moto-package="${esc(item.id)}">
+    <label class="f">Nome do pacote<input data-moto-field="name" value="${esc(item.name)}" placeholder="Ex.: Lavagem completa"></label>
+    <label class="f">Serviços incluídos<textarea data-moto-field="items" rows="4" placeholder="Informe um serviço por linha">${esc((item.items || []).join('\n'))}</textarea></label>
     <label class="f">Valor para motos (R$)<input data-moto-field="price" type="number" min="0" step="0.01" inputmode="decimal" value="${price}" placeholder="Ex.: 80,00"></label>
-    <button class="btn pri" type="button" data-moto-action="save" data-moto-id="${escapeHtml(item.id)}">Salvar pacote</button>
-    <button class="link center" type="button" data-moto-action="remove" data-moto-id="${escapeHtml(item.id)}">Remover pacote</button>
+    <button class="btn pri" type="button" data-moto-action="save" data-moto-id="${esc(item.id)}">Salvar pacote</button>
+    <button class="link center" type="button" data-moto-action="remove" data-moto-id="${esc(item.id)}">Remover pacote</button>
   </article>`;
 }
 
 function renderPanel(panel) {
-  if (!configReady) {
+  if (!panel) return;
+  if (!ready) {
     panel.innerHTML = '<p class="muted">Carregando os pacotes para motos…</p>';
     return;
   }
-  panel.innerHTML = `<p class="muted">Cadastre o valor e os serviços de cada pacote. Estas opções são exclusivas para motos e não usam portes de veículo.</p>
-    <div class="stack">${catalog.map(packageCard).join('') || '<p class="muted">Nenhum pacote cadastrado para motos.</p>'}</div>
+  panel.innerHTML = `<p class="muted">Cadastre cada pacote com um valor único para motos e os serviços incluídos. Não há divisão por porte.</p>
+    <div class="stack">${packages.map(packageCard).join('') || '<p class="muted">Nenhum pacote cadastrado para motos.</p>'}</div>
     <button class="btn ghost" type="button" data-moto-action="add">Adicionar pacote para motos</button>
     <p class="err" data-moto-error hidden></p>`;
 }
 
 function setView(page, tabs, panel, view) {
+  if (!page || !tabs || !panel) return;
   activeView = view;
-  const isMotos = view === 'motos';
-  tabs.querySelectorAll('button').forEach((button) => {
+  const motorcycles = view === 'motos';
+  tabs.querySelectorAll('[data-moto-view]').forEach((button) => {
     const selected = button.dataset.motoView === view;
     button.classList.toggle('on', selected);
     button.setAttribute('aria-pressed', String(selected));
   });
-  panel.hidden = !isMotos;
-  page.querySelectorAll(':scope > section:not(.moto-services-panel)').forEach((section) => { section.hidden = isMotos; });
-  const newButton = page.querySelector('.head .btn');
-  if (newButton) newButton.hidden = isMotos;
-  if (isMotos) renderPanel(panel);
+  panel.hidden = !motorcycles;
+  page.querySelectorAll(':scope > section:not(.moto-services-panel)').forEach((section) => {
+    section.hidden = motorcycles;
+  });
+  const newServiceButton = page.querySelector('.head .btn');
+  if (newServiceButton) newServiceButton.hidden = motorcycles;
+  if (motorcycles) renderPanel(panel);
 }
 
 function mount() {
+  if (rendering) return;
   const app = document.getElementById('app');
   const page = app?.querySelector('main.page');
   const header = page?.querySelector(':scope > .head');
-  if (!page || !header || header.querySelector('h1')?.textContent.trim() !== 'Serviços') return;
+  if (!page || header?.querySelector('h1')?.textContent.trim() !== 'Serviços') return;
 
   let tabs = page.querySelector('.moto-services-tabs');
   let panel = page.querySelector('.moto-services-panel');
-  if (!tabs) {
+  if (!tabs || !panel) {
     tabs = document.createElement('div');
     tabs.className = 'seg wide moto-services-tabs';
-    tabs.innerHTML = '<button type="button" data-moto-view="cars">Serviços para carros</button><button type="button" data-moto-view="motos">Serviços para Motos</button>';
+    tabs.innerHTML = '<button type="button" data-moto-view="cars" aria-pressed="false">Serviços para carros</button><button type="button" data-moto-view="motos" aria-pressed="false">Serviços para Motos</button>';
     panel = document.createElement('section');
     panel.className = 'moto-services-panel';
     panel.hidden = true;
@@ -80,18 +78,27 @@ function mount() {
 }
 
 async function persist() {
-  await setDoc(configRef, { motoCatalog: catalog }, { merge: true });
+  await setDoc(catalogRef, { packages }, { merge: true });
 }
 
-function packageForm(button) {
+function readPackage(button) {
   const card = button.closest('[data-moto-package]');
   if (!card) return null;
+  const priceText = card.querySelector('[data-moto-field="price"]').value;
   return {
     id: card.dataset.motoPackage,
     name: card.querySelector('[data-moto-field="name"]').value.trim(),
     items: card.querySelector('[data-moto-field="items"]').value.split('\n').map((item) => item.trim()).filter(Boolean),
-    price: card.querySelector('[data-moto-field="price"]').value === '' ? null : Number(card.querySelector('[data-moto-field="price"]').value),
+    price: priceText === '' ? null : Number(priceText),
   };
+}
+
+function showError(panel, message) {
+  const error = panel?.querySelector('[data-moto-error]');
+  if (error) {
+    error.textContent = message;
+    error.hidden = false;
+  }
 }
 
 document.addEventListener('click', async (event) => {
@@ -105,57 +112,76 @@ document.addEventListener('click', async (event) => {
   const button = event.target.closest('[data-moto-action]');
   if (!button) return;
   const panel = button.closest('.moto-services-panel');
-  const error = panel?.querySelector('[data-moto-error]');
-  if (error) error.hidden = true;
 
   if (button.dataset.motoAction === 'add') {
-    catalog.push({ id: `moto-${Date.now()}`, name: '', price: '', items: [] });
+    packages.push({ id: `moto-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, name: '', items: [], price: null });
     renderPanel(panel);
+    panel.querySelector(`[data-moto-package="${CSS.escape(packages.at(-1).id)}"] [data-moto-field="name"]`)?.focus();
     return;
   }
 
   if (button.dataset.motoAction === 'remove') {
-    catalog = catalog.filter((item) => item.id !== button.dataset.motoId);
-    try { await persist(); renderPanel(panel); }
-    catch (exception) { if (error) { error.textContent = 'Não foi possível salvar. Tente novamente.'; error.hidden = false; } console.error(exception); }
+    const id = button.dataset.motoId;
+    if (!window.confirm('Remover este pacote para motos?')) return;
+    const previous = packages;
+    packages = packages.filter((item) => item.id !== id);
+    button.disabled = true;
+    try {
+      await persist();
+      renderPanel(panel);
+    } catch (error) {
+      packages = previous;
+      button.disabled = false;
+      showError(panel, 'Não foi possível remover o pacote. Confira a conexão e tente novamente.');
+      console.error(error);
+    }
     return;
   }
 
   if (button.dataset.motoAction === 'save') {
-    const updated = packageForm(button);
+    const updated = readPackage(button);
     if (!updated?.name) {
-      if (error) { error.textContent = 'Informe o nome do pacote.'; error.hidden = false; }
+      showError(panel, 'Informe o nome do pacote.');
       return;
     }
-    catalog = catalog.map((item) => item.id === updated.id ? updated : item);
+    const previous = packages;
+    packages = packages.map((item) => item.id === updated.id ? updated : item);
     button.disabled = true;
     try {
       await persist();
       button.textContent = 'Pacote salvo';
-      setTimeout(() => { if (button.isConnected) { button.textContent = 'Salvar pacote'; button.disabled = false; } }, 1400);
-    } catch (exception) {
+      setTimeout(() => {
+        if (button.isConnected) {
+          button.textContent = 'Salvar pacote';
+          button.disabled = false;
+        }
+      }, 1400);
+    } catch (error) {
+      packages = previous;
       button.disabled = false;
-      if (error) { error.textContent = 'Não foi possível salvar. Confira a conexão e tente novamente.'; error.hidden = false; }
-      console.error(exception);
+      showError(panel, 'Não foi possível salvar. Confira a conexão e tente novamente.');
+      console.error(error);
     }
   }
 });
 
+const app = document.getElementById('app');
 const observer = new MutationObserver(() => {
-  if (renderQueued) return;
-  renderQueued = true;
-  queueMicrotask(() => { renderQueued = false; mount(); });
+  // Avoid reacting to the tab's own DOM mutations; the app replaces #app on render.
+  if (rendering) return;
+  mount();
 });
-observer.observe(document.getElementById('app') || document.body, { childList: true, subtree: true });
+observer.observe(app || document.body, { childList: true, subtree: true });
 
-onSnapshot(configRef, (snapshot) => {
-  if (!snapshot.exists()) return;
-  const data = snapshot.data();
-  if (Array.isArray(data.motoCatalog)) catalog = data.motoCatalog;
-  else catalog = seedFromServices(data.services || []);
-  configReady = true;
+onSnapshot(catalogRef, (snapshot) => {
+  packages = snapshot.exists() && Array.isArray(snapshot.data().packages) ? snapshot.data().packages : [];
+  ready = true;
   const panel = document.querySelector('.moto-services-panel');
   if (panel && activeView === 'motos' && !panel.querySelector('input:focus, textarea:focus')) renderPanel(panel);
-}, (error) => console.error('Não foi possível carregar os serviços para motos:', error));
+}, (error) => {
+  ready = true;
+  console.error('Não foi possível carregar os pacotes para motos:', error);
+  showError(document.querySelector('.moto-services-panel'), 'Não foi possível carregar os pacotes. Verifique sua conexão e suas permissões.');
+});
 
 mount();
