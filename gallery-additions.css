@@ -1,0 +1,10 @@
+/* Additional before/after group in the Results gallery. */
+.gal-extra{display:flex;flex-direction:column;gap:12px;margin-top:8px}
+.gal-extra h2{margin:0}
+.gal-extra-pairs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.gal-extra-pair{min-width:0;margin:0;display:flex;flex-direction:column;gap:7px}
+.gal-extra-photo{position:relative;display:flex;align-items:center;justify-content:center;aspect-ratio:4/3;overflow:hidden;border:1px solid var(--line);border-radius:12px;background:var(--panel2)}
+.gal-extra-photo img{display:block;width:100%;height:100%;object-fit:contain}
+.gal-extra-badge{position:absolute;top:8px;left:8px;padding:5px 9px;border:1px solid #ffffff55;border-radius:7px;background:#05080fe8;color:#fff;font-size:.72rem;font-weight:800;letter-spacing:.06em;box-shadow:0 2px 8px #0008}
+.gal-extra-pair figcaption{font-size:.82rem;font-weight:600;color:var(--fg2)}
+@media(max-width:360px){.gal-extra-pairs{gap:7px}.gal-extra-badge{top:5px;left:5px;padding:4px 6px;font-size:.65rem}.gal-extra-pair figcaption{font-size:.75rem}}
