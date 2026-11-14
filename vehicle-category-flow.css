@@ -1,0 +1,11 @@
+/* Category-based vehicle flow and starting prices */
+.category-admin,.category-service{display:flex;flex-direction:column;gap:12px}
+.category-prices{display:flex;flex-direction:column;gap:10px}
+.category-price-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px 0;border-top:1px solid var(--line)}
+.category-price-row>strong{grid-column:1/-1;color:var(--sky)}
+.category-flow .category-price-row input{min-width:0}
+.category-flow [data-category-flow] .head{margin-bottom:4px}
+.category-flow .pkg-m small{display:block;color:var(--muted);font-size:.76rem}
+.category-flow [data-flow="toggle-service"]{padding:0;text-align:left;width:100%}
+.category-flow .days button{min-width:72px}
+.category-flow .slots button{min-height:48px}
